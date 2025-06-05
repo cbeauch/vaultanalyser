@@ -14,7 +14,7 @@ from metrics.drawdown import (
     calculate_sharpe_ratio,
     calculate_sortino_ratio,
 )
-from metrics.enhanced_metrics import calculate_all_enhanced_metrics
+from metrics.enhanced_metrics import calculate_all_enhanced_metrics_with_timestamps
 
 # Page config
 st.set_page_config(page_title="HyperLiquid Vault Analyser", page_icon="📊", layout="wide")
@@ -258,8 +258,13 @@ if not cache_used:
                     "Gain %": calculate_total_gain_percentage(rebuilded_pnl),
                 }
                 
-                # Calculate enhanced metrics
-                enhanced_metrics = calculate_all_enhanced_metrics(rebuilded_pnl, vault["Days Since"])
+                # Calculate enhanced metrics using timestamp data
+                enhanced_metrics = calculate_all_enhanced_metrics_with_timestamps(
+                    data_source_pnlHistory,
+                    data_source_accountValueHistory,
+                    rebuilded_pnl,
+                    vault["Days Since"]
+                )
                 
                 # Combine all metrics
                 metrics = {**existing_metrics, **enhanced_metrics}

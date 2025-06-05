@@ -1,57 +1,79 @@
 """
 Enhanced metrics for vault analysis - additional trading statistics.
+Uses actual timestamp data to calculate proper time-based metrics.
 """
 
 import numpy as np
 from typing import List, Dict, Tuple
 
 
-def calculate_daily_returns(pnl_values: List[float]) -> List[float]:
-    """Calculate daily returns from PnL values."""
-    if len(pnl_values) < 2:
-        return []
+def calculate_time_based_returns(pnl_history: List[List], account_value_history: List[List]) -> Tuple[List[float], List[float]]:
+    """
+    Calculate returns and time intervals from timestamp data.
+    
+    :param pnl_history: List of [timestamp, pnl_value] pairs
+    :param account_value_history: List of [timestamp, account_value] pairs
+    :return: (returns_list, time_intervals_in_days)
+    """
+    if len(pnl_history) < 2 or len(account_value_history) < 2:
+        return [], []
     
     returns = []
-    for i in range(1, len(pnl_values)):
-        if pnl_values[i-1] != 0:
-            daily_return = (pnl_values[i] - pnl_values[i-1]) / pnl_values[i-1]
-            returns.append(daily_return)
+    time_intervals = []
     
-    return returns
+    for i in range(1, len(pnl_history)):
+        prev_timestamp = pnl_history[i-1][0]
+        curr_timestamp = pnl_history[i][0]
+        
+        prev_value = float(account_value_history[i-1][1])
+        curr_value = float(account_value_history[i][1])
+        
+        if prev_value != 0:
+            period_return = (curr_value - prev_value) / prev_value
+            returns.append(period_return)
+            
+            # Calculate time interval in days
+            time_interval_ms = curr_timestamp - prev_timestamp
+            time_interval_days = time_interval_ms / (1000 * 60 * 60 * 24)  # Convert ms to days
+            time_intervals.append(time_interval_days)
+    
+    return returns, time_intervals
 
 
-def calculate_win_rate(pnl_values: List[float]) -> float:
+def calculate_win_rate_with_timestamps(pnl_history: List[List], account_value_history: List[List]) -> float:
     """
-    Calculate win rate (percentage of profitable periods).
+    Calculate win rate (percentage of profitable periods) using timestamp data.
     
-    :param pnl_values: List of daily PnL values
+    :param pnl_history: List of [timestamp, pnl_value] pairs
+    :param account_value_history: List of [timestamp, account_value] pairs
     :return: Win rate as percentage (0-100)
     """
-    daily_returns = calculate_daily_returns(pnl_values)
+    returns, _ = calculate_time_based_returns(pnl_history, account_value_history)
     
-    if not daily_returns:
+    if not returns:
         return 0.0
     
-    winning_days = sum(1 for ret in daily_returns if ret > 0)
-    win_rate = (winning_days / len(daily_returns)) * 100
+    winning_periods = sum(1 for ret in returns if ret > 0)
+    win_rate = (winning_periods / len(returns)) * 100
     
     return round(win_rate, 2)
 
 
-def calculate_profit_factor(pnl_values: List[float]) -> float:
+def calculate_profit_factor_with_timestamps(pnl_history: List[List], account_value_history: List[List]) -> float:
     """
-    Calculate profit factor (total gains / total losses).
+    Calculate profit factor (total gains / total losses) using timestamp data.
     
-    :param pnl_values: List of daily PnL values
+    :param pnl_history: List of [timestamp, pnl_value] pairs
+    :param account_value_history: List of [timestamp, account_value] pairs
     :return: Profit factor
     """
-    daily_returns = calculate_daily_returns(pnl_values)
+    returns, _ = calculate_time_based_returns(pnl_history, account_value_history)
     
-    if not daily_returns:
+    if not returns:
         return 0.0
     
-    total_gains = sum(ret for ret in daily_returns if ret > 0)
-    total_losses = abs(sum(ret for ret in daily_returns if ret < 0))
+    total_gains = sum(ret for ret in returns if ret > 0)
+    total_losses = abs(sum(ret for ret in returns if ret < 0))
     
     if total_losses == 0:
         return float('inf') if total_gains > 0 else 0.0
@@ -59,20 +81,21 @@ def calculate_profit_factor(pnl_values: List[float]) -> float:
     return round(total_gains / total_losses, 2)
 
 
-def calculate_average_win_loss(pnl_values: List[float]) -> Tuple[float, float]:
+def calculate_average_win_loss_with_timestamps(pnl_history: List[List], account_value_history: List[List]) -> Tuple[float, float]:
     """
-    Calculate average win and average loss.
+    Calculate average win and average loss using timestamp data.
     
-    :param pnl_values: List of daily PnL values
+    :param pnl_history: List of [timestamp, pnl_value] pairs
+    :param account_value_history: List of [timestamp, account_value] pairs
     :return: (average_win_pct, average_loss_pct)
     """
-    daily_returns = calculate_daily_returns(pnl_values)
+    returns, _ = calculate_time_based_returns(pnl_history, account_value_history)
     
-    if not daily_returns:
+    if not returns:
         return 0.0, 0.0
     
-    wins = [ret for ret in daily_returns if ret > 0]
-    losses = [ret for ret in daily_returns if ret < 0]
+    wins = [ret for ret in returns if ret > 0]
+    losses = [ret for ret in returns if ret < 0]
     
     avg_win = (sum(wins) / len(wins) * 100) if wins else 0.0
     avg_loss = (sum(losses) / len(losses) * 100) if losses else 0.0
@@ -80,16 +103,17 @@ def calculate_average_win_loss(pnl_values: List[float]) -> Tuple[float, float]:
     return round(avg_win, 2), round(abs(avg_loss), 2)
 
 
-def calculate_consecutive_stats(pnl_values: List[float]) -> Dict[str, int]:
+def calculate_consecutive_stats_with_timestamps(pnl_history: List[List], account_value_history: List[List]) -> Dict[str, int]:
     """
-    Calculate maximum consecutive wins and losses.
+    Calculate maximum consecutive wins and losses using timestamp data.
     
-    :param pnl_values: List of daily PnL values
+    :param pnl_history: List of [timestamp, pnl_value] pairs
+    :param account_value_history: List of [timestamp, account_value] pairs
     :return: Dictionary with consecutive win/loss stats
     """
-    daily_returns = calculate_daily_returns(pnl_values)
+    returns, _ = calculate_time_based_returns(pnl_history, account_value_history)
     
-    if not daily_returns:
+    if not returns:
         return {"max_consecutive_wins": 0, "max_consecutive_losses": 0}
     
     max_consecutive_wins = 0
@@ -97,7 +121,7 @@ def calculate_consecutive_stats(pnl_values: List[float]) -> Dict[str, int]:
     current_consecutive_wins = 0
     current_consecutive_losses = 0
     
-    for ret in daily_returns:
+    for ret in returns:
         if ret > 0:
             current_consecutive_wins += 1
             current_consecutive_losses = 0
@@ -116,41 +140,47 @@ def calculate_consecutive_stats(pnl_values: List[float]) -> Dict[str, int]:
     }
 
 
-def calculate_volatility(pnl_values: List[float], annualize: bool = True) -> float:
+def calculate_volatility_with_timestamps(pnl_history: List[List], account_value_history: List[List], annualize: bool = True) -> float:
     """
-    Calculate volatility (standard deviation of returns).
+    Calculate volatility using actual time intervals from timestamp data.
     
-    :param pnl_values: List of daily PnL values
-    :param annualize: Whether to annualize the volatility (multiply by sqrt(365))
+    :param pnl_history: List of [timestamp, pnl_value] pairs
+    :param account_value_history: List of [timestamp, account_value] pairs
+    :param annualize: Whether to annualize the volatility
     :return: Volatility as percentage
     """
-    daily_returns = calculate_daily_returns(pnl_values)
+    returns, time_intervals = calculate_time_based_returns(pnl_history, account_value_history)
     
-    if len(daily_returns) < 2:
+    if len(returns) < 2:
         return 0.0
     
-    volatility = np.std(daily_returns, ddof=1)
+    volatility = np.std(returns, ddof=1)
     
-    if annualize:
-        volatility *= np.sqrt(365)  # Annualize assuming daily data
+    if annualize and time_intervals:
+        # Calculate average time interval and use it for proper annualization
+        avg_interval_days = np.mean(time_intervals)
+        if avg_interval_days > 0:
+            # Annualize based on actual time intervals
+            periods_per_year = 365 / avg_interval_days
+            volatility *= np.sqrt(periods_per_year)
     
     return round(float(volatility * 100), 2)
 
 
-def calculate_calmar_ratio(pnl_values: List[float], days_since: int) -> float:
+def calculate_calmar_ratio_with_timestamps(pnl_values: List[float], total_days: int) -> float:
     """
-    Calculate Calmar ratio (annualized return / max drawdown).
+    Calculate Calmar ratio (annualized return / max drawdown) using proper time period.
     
-    :param pnl_values: List of daily PnL values
-    :param days_since: Number of days since inception
+    :param pnl_values: List of reconstructed PnL values
+    :param total_days: Total number of days since inception
     :return: Calmar ratio
     """
-    if len(pnl_values) < 2 or days_since <= 0:
+    if len(pnl_values) < 2 or total_days <= 0:
         return 0.0
     
-    # Calculate annualized return
+    # Calculate annualized return using actual time period
     total_return = (pnl_values[-1] - pnl_values[0]) / pnl_values[0]
-    annualized_return = (1 + total_return) ** (365 / days_since) - 1
+    annualized_return = (1 + total_return) ** (365 / total_days) - 1
     
     # Calculate max drawdown
     from .drawdown import calculate_max_drawdown_on_accountValue
@@ -166,7 +196,7 @@ def calculate_recovery_factor(pnl_values: List[float]) -> float:
     """
     Calculate recovery factor (total return / max drawdown).
     
-    :param pnl_values: List of daily PnL values
+    :param pnl_values: List of reconstructed PnL values
     :return: Recovery factor
     """
     if len(pnl_values) < 2:
@@ -187,7 +217,7 @@ def calculate_ulcer_index(pnl_values: List[float]) -> float:
     """
     Calculate Ulcer Index (measure of downside risk).
     
-    :param pnl_values: List of daily PnL values
+    :param pnl_values: List of reconstructed PnL values
     :return: Ulcer Index as percentage
     """
     if len(pnl_values) < 2:
@@ -205,20 +235,20 @@ def calculate_ulcer_index(pnl_values: List[float]) -> float:
     return round(ulcer_index, 2)
 
 
-def calculate_sterling_ratio(pnl_values: List[float], days_since: int) -> float:
+def calculate_sterling_ratio_with_timestamps(pnl_values: List[float], total_days: int) -> float:
     """
-    Calculate Sterling ratio (annualized return / average drawdown).
+    Calculate Sterling ratio (annualized return / average drawdown) using proper time period.
     
-    :param pnl_values: List of daily PnL values
-    :param days_since: Number of days since inception
+    :param pnl_values: List of reconstructed PnL values
+    :param total_days: Total number of days since inception
     :return: Sterling ratio
     """
-    if len(pnl_values) < 2 or days_since <= 0:
+    if len(pnl_values) < 2 or total_days <= 0:
         return 0.0
     
-    # Calculate annualized return
+    # Calculate annualized return using actual time period
     total_return = (pnl_values[-1] - pnl_values[0]) / pnl_values[0]
-    annualized_return = (1 + total_return) ** (365 / days_since) - 1
+    annualized_return = (1 + total_return) ** (365 / total_days) - 1
     
     # Calculate average drawdown
     running_max = pnl_values[0]
@@ -237,67 +267,95 @@ def calculate_sterling_ratio(pnl_values: List[float], days_since: int) -> float:
     return round((annualized_return * 100) / avg_drawdown, 2)
 
 
-def calculate_daily_var(pnl_values: List[float], confidence_level: float = 0.95) -> float:
+def calculate_var_with_timestamps(pnl_history: List[List], account_value_history: List[List], confidence_level: float = 0.95) -> float:
     """
-    Calculate Value at Risk (VaR) at specified confidence level.
+    Calculate Value at Risk (VaR) at specified confidence level using timestamp data.
     
-    :param pnl_values: List of daily PnL values
+    :param pnl_history: List of [timestamp, pnl_value] pairs
+    :param account_value_history: List of [timestamp, account_value] pairs
     :param confidence_level: Confidence level (default 95%)
     :return: VaR as percentage
     """
-    daily_returns = calculate_daily_returns(pnl_values)
+    returns, _ = calculate_time_based_returns(pnl_history, account_value_history)
     
-    if len(daily_returns) < 2:
+    if len(returns) < 2:
         return 0.0
     
-    var = np.percentile(daily_returns, (1 - confidence_level) * 100)
+    var = np.percentile(returns, (1 - confidence_level) * 100)
     return round(float(abs(var) * 100), 2)
 
 
-def calculate_expectancy(pnl_values: List[float]) -> float:
+def calculate_expectancy_with_timestamps(pnl_history: List[List], account_value_history: List[List], total_days: int) -> float:
     """
-    Calculate expectancy (average return per trade).
+    Calculate expectancy (average return per period, annualized).
     
-    :param pnl_values: List of daily PnL values
-    :return: Expectancy as percentage
+    :param pnl_history: List of [timestamp, pnl_value] pairs
+    :param account_value_history: List of [timestamp, account_value] pairs
+    :param total_days: Total number of days since inception
+    :return: Expectancy as percentage (annualized)
     """
-    daily_returns = calculate_daily_returns(pnl_values)
+    returns, time_intervals = calculate_time_based_returns(pnl_history, account_value_history)
     
-    if not daily_returns:
+    if not returns or not time_intervals:
         return 0.0
     
-    expectancy = sum(daily_returns) / len(daily_returns) * 100
-    return round(expectancy, 4)
-
-
-def calculate_all_enhanced_metrics(pnl_values: List[float], days_since: int) -> Dict[str, float]:
-    """
-    Calculate all enhanced metrics at once.
+    avg_return_per_period = sum(returns) / len(returns)
+    avg_interval_days = np.mean(time_intervals)
     
-    :param pnl_values: List of daily PnL values
-    :param days_since: Number of days since inception
+    if avg_interval_days > 0:
+        # Annualize the expectancy
+        periods_per_year = 365 / avg_interval_days
+        annualized_expectancy = avg_return_per_period * periods_per_year * 100
+        return round(annualized_expectancy, 4)
+    
+    return 0.0
+
+
+def calculate_all_enhanced_metrics_with_timestamps(
+    pnl_history: List[List], 
+    account_value_history: List[List], 
+    rebuilded_pnl: List[float], 
+    total_days: int
+) -> Dict[str, float]:
+    """
+    Calculate all enhanced metrics using timestamp data for accurate time-based calculations.
+    
+    :param pnl_history: List of [timestamp, pnl_value] pairs from raw vault data
+    :param account_value_history: List of [timestamp, account_value] pairs from raw vault data
+    :param rebuilded_pnl: List of reconstructed PnL values for drawdown calculations
+    :param total_days: Total number of days since inception
     :return: Dictionary with all calculated metrics
     """
-    if not pnl_values or len(pnl_values) < 2:
+    if not pnl_history or len(pnl_history) < 2:
         return {}
     
-    avg_win, avg_loss = calculate_average_win_loss(pnl_values)
-    consecutive_stats = calculate_consecutive_stats(pnl_values)
+    avg_win, avg_loss = calculate_average_win_loss_with_timestamps(pnl_history, account_value_history)
+    consecutive_stats = calculate_consecutive_stats_with_timestamps(pnl_history, account_value_history)
     
     metrics = {
-        "Win Rate %": calculate_win_rate(pnl_values),
-        "Profit Factor": calculate_profit_factor(pnl_values),
+        "Win Rate %": calculate_win_rate_with_timestamps(pnl_history, account_value_history),
+        "Profit Factor": calculate_profit_factor_with_timestamps(pnl_history, account_value_history),
         "Avg Win %": avg_win,
         "Avg Loss %": avg_loss,
         "Max Consecutive Wins": consecutive_stats["max_consecutive_wins"],
         "Max Consecutive Losses": consecutive_stats["max_consecutive_losses"],
-        "Volatility %": calculate_volatility(pnl_values),
-        "Calmar Ratio": calculate_calmar_ratio(pnl_values, days_since),
-        "Recovery Factor": calculate_recovery_factor(pnl_values),
-        "Ulcer Index": calculate_ulcer_index(pnl_values),
-        "Sterling Ratio": calculate_sterling_ratio(pnl_values, days_since),
-        "VaR 95% %": calculate_daily_var(pnl_values, 0.95),
-        "Expectancy %": calculate_expectancy(pnl_values),
+        "Volatility %": calculate_volatility_with_timestamps(pnl_history, account_value_history),
+        "Calmar Ratio": calculate_calmar_ratio_with_timestamps(rebuilded_pnl, total_days),
+        "Recovery Factor": calculate_recovery_factor(rebuilded_pnl),
+        "Ulcer Index": calculate_ulcer_index(rebuilded_pnl),
+        "Sterling Ratio": calculate_sterling_ratio_with_timestamps(rebuilded_pnl, total_days),
+        "VaR 95% %": calculate_var_with_timestamps(pnl_history, account_value_history, 0.95),
+        "Expectancy %": calculate_expectancy_with_timestamps(pnl_history, account_value_history, total_days),
     }
     
-    return metrics 
+    return metrics
+
+
+# Legacy function for backward compatibility (fallback to old calculation if timestamps not available)
+def calculate_all_enhanced_metrics(pnl_values: List[float], days_since: int) -> Dict[str, float]:
+    """
+    Legacy function for backward compatibility. 
+    This should not be used anymore as it assumes daily intervals.
+    """
+    # Return empty dict to signal that timestamp data is needed
+    return {} 

@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -17,10 +18,29 @@ from metrics.drawdown import (
 from metrics.enhanced_metrics import calculate_all_enhanced_metrics_with_timestamps
 
 # Page config
-st.set_page_config(page_title="HyperLiquid Vault Analyser", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Xin Vault Analyzer", page_icon="📊", layout="wide")
 
-# Title and description
-st.title("📊 HyperLiquid Vault Analyser")
+# Header with optional banner image
+import os
+
+# Check if banner image exists
+banner_path = "assets/banner.png"  # You can change this to banner.jpg, banner.svg, etc.
+alternative_banner_path = "assets/logo.png"  # Alternative image name
+
+if os.path.exists(banner_path):
+    # Display banner image
+    st.image(banner_path, use_container_width=True)
+    # Smaller title below banner
+    st.markdown("<h2 style='text-align: center; margin-top: -10px;'>📊 Xin Vault Analyzer</h2>", unsafe_allow_html=True)
+elif os.path.exists(alternative_banner_path):
+    # Display alternative image
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image(alternative_banner_path, use_container_width=True)
+    st.markdown("<h2 style='text-align: center; margin-top: 10px;'>📊 Xin Vault Analyzer</h2>", unsafe_allow_html=True)
+else:
+    # Default title without image
+    st.title("📊 Xin Vault Analyzer")
 
 # Update time display
 try:
@@ -92,14 +112,18 @@ def read_date_file(directory="./cache"):
 # Layout for 3 columns
 
 
-def slider_with_label(label, col, min_value, max_value, default_value, step, key):
-    """Create a slider with a custom centered title."""
+def slider_with_label_and_toggle(label, col, min_value, max_value, default_value, step, key):
+    """Create a slider with a custom centered title and toggle."""
     col.markdown(f"<h3 style='text-align: center;'>{label}</h3>", unsafe_allow_html=True)
+    
+    # Add toggle switch
+    toggle_enabled = col.toggle("Enable Filter", key=f"toggle_{key}", value=False)
+    
     if not min_value < max_value:
         col.markdown(
             f"<p style='text-align: center;'>No choice available ({min_value} for all)</p>", unsafe_allow_html=True
         )
-        return None
+        return None, toggle_enabled
 
     if default_value < min_value:
         default_value = min_value
@@ -107,15 +131,31 @@ def slider_with_label(label, col, min_value, max_value, default_value, step, key
     if default_value > max_value:
         default_value = max_value
 
-    return col.slider(
-        label,
-        min_value=min_value,
-        max_value=max_value,
-        value=default_value,
-        step=step,
-        label_visibility="hidden",
-        key=key,
-    )
+    # Show slider only if toggle is enabled, otherwise show disabled slider
+    if toggle_enabled:
+        value = col.slider(
+            label,
+            min_value=min_value,
+            max_value=max_value,
+            value=default_value,
+            step=step,
+            label_visibility="hidden",
+            key=key,
+        )
+    else:
+        # Show disabled slider with default value
+        value = col.slider(
+            label,
+            min_value=min_value,
+            max_value=max_value,
+            value=default_value,
+            step=step,
+            label_visibility="hidden",
+            key=key,
+            disabled=True,
+        )
+    
+    return value, toggle_enabled
 
 
 def calculate_average_daily_gain(rebuilded_pnl, days_since):
@@ -292,14 +332,21 @@ st.subheader(f"Vaults available ({len(final_df)})")
 filtered_df = final_df
 
 
-# Filter by 'Name' (last filter, free text)
+# Filter by 'Name' (free text filter with toggle)
 st.markdown("<h3 style='text-align: center;'>Filter by Name</h3>", unsafe_allow_html=True)
-name_filter = st.text_input(
-    "Name Filter", "", placeholder="Enter names separated by ',' to filter (e.g., toto,tata)...", key="name_filter"
-)
+name_filter_enabled = st.toggle("Enable Name Filter", key="toggle_name_filter", value=False)
 
-# Apply the filter
-if name_filter.strip():  # Check that the filter is not empty
+if name_filter_enabled:
+    name_filter = st.text_input(
+        "Name Filter", "", placeholder="Enter names separated by ',' to filter (e.g., toto,tata)...", key="name_filter"
+    )
+else:
+    name_filter = st.text_input(
+        "Name Filter", "", placeholder="Enter names separated by ',' to filter (e.g., toto,tata)...", key="name_filter", disabled=True
+    )
+
+# Apply the name filter only if enabled and not empty
+if name_filter_enabled and name_filter.strip():
     name_list = [name.strip() for name in name_filter.split(",")]  # List of names to search for
     pattern = "|".join(name_list)  # Create a regex pattern with logical "or"
     filtered_df = filtered_df[filtered_df["Name"].str.contains(pattern, case=False, na=False, regex=True)]
@@ -325,23 +372,105 @@ for i in range(0, len(sliders), 3):
     for slider, col in zip(sliders[i : i + 3], cols):
         column = slider["column"]
         if column in filtered_df.columns:  # Check if column exists
-            value = slider_with_label(
-                slider["label"],
-                col,
-                min_value=float(filtered_df[column].min()),
-                max_value=float(filtered_df[column].max()),
-                default_value=float(slider["default"]),
-                step=float(slider["step"]),
-                key=f"slider_{column}",
-            )
-            if not value == None:
-                if slider["max"]:
-                    filtered_df = filtered_df[filtered_df[column] <= value]
-                else:
-                    filtered_df = filtered_df[filtered_df[column] >= value]
+            # Clean the data - remove NaN, infinity values
+            clean_data = filtered_df[column].replace([np.inf, -np.inf], np.nan).dropna()
+            
+            if len(clean_data) > 0:
+                # Get safe min/max values
+                col_min = float(clean_data.min())
+                col_max = float(clean_data.max())
+                
+                # Ensure min < max and handle edge cases
+                if col_min >= col_max:
+                    col_max = col_min + 1
+                
+                # Ensure default value is within range
+                safe_default = max(col_min, min(col_max, float(slider["default"])))
+                
+                try:
+                    value, toggle_enabled = slider_with_label_and_toggle(
+                        slider["label"],
+                        col,
+                        min_value=col_min,
+                        max_value=col_max,
+                        default_value=safe_default,
+                        step=float(slider["step"]),
+                        key=f"slider_{column}",
+                    )
+                    # Only apply filter if toggle is enabled and value is not None
+                    if toggle_enabled and value is not None:
+                        if slider["max"]:
+                            filtered_df = filtered_df[filtered_df[column] <= value]
+                        else:
+                            filtered_df = filtered_df[filtered_df[column] >= value]
+                except Exception as e:
+                    # If slider still fails, show error message
+                    col.error(f"Error with {column}: {str(e)}")
+            else:
+                # No valid data for this column
+                col.warning(f"No valid data for {column}")
 
-# Display the table
-st.title(f"Vaults filtered ({len(filtered_df)}) ")
+# Multi-Column Sorting Section
+st.markdown("---")
+st.markdown("<h3 style='text-align: center;'>🔄 Multi-Column Sorting</h3>", unsafe_allow_html=True)
+
+# Get numeric columns for sorting (exclude non-numeric columns)
+numeric_columns = []
+for col in filtered_df.columns:
+    if col not in ["Name", "Vault", "Link"] and pd.api.types.is_numeric_dtype(filtered_df[col]):
+        numeric_columns.append(col)
+
+# Add "None" option for unused sort levels
+sort_options = ["None"] + numeric_columns
+
+# Create sorting controls in 3 columns
+sort_col1, sort_col2, sort_col3 = st.columns(3)
+
+# Set default primary sort to APR if it exists and no sort has been selected yet
+default_primary_index = 0
+if "APR" in sort_options and "primary_sort" not in st.session_state:
+    default_primary_index = sort_options.index("APR")
+
+with sort_col1:
+    st.markdown("<h4 style='text-align: center;'>Primary Sort</h4>", unsafe_allow_html=True)
+    primary_sort = st.selectbox("Primary Sort Column", options=sort_options, index=default_primary_index, key="primary_sort")
+    if primary_sort != "None":
+        primary_order = st.radio("Primary Order", ["Descending (High to Low)", "Ascending (Low to High)"], key="primary_order")
+
+with sort_col2:
+    st.markdown("<h4 style='text-align: center;'>Secondary Sort</h4>", unsafe_allow_html=True)
+    secondary_sort = st.selectbox("Secondary Sort Column", options=sort_options, index=0, key="secondary_sort")
+    if secondary_sort != "None":
+        secondary_order = st.radio("Secondary Order", ["Descending (High to Low)", "Ascending (Low to High)"], key="secondary_order")
+
+with sort_col3:
+    st.markdown("<h4 style='text-align: center;'>Tertiary Sort</h4>", unsafe_allow_html=True)
+    tertiary_sort = st.selectbox("Tertiary Sort Column", options=sort_options, index=0, key="tertiary_sort")
+    if tertiary_sort != "None":
+        tertiary_order = st.radio("Tertiary Order", ["Descending (High to Low)", "Ascending (Low to High)"], key="tertiary_order")
+
+# Apply multi-column sorting
+sort_columns = []
+sort_ascending = []
+
+if tertiary_sort != "None":
+    sort_columns.append(tertiary_sort)
+    sort_ascending.append(tertiary_order == "Ascending (Low to High)")
+
+if secondary_sort != "None":
+    sort_columns.append(secondary_sort)
+    sort_ascending.append(secondary_order == "Ascending (Low to High)")
+
+if primary_sort != "None":
+    sort_columns.append(primary_sort)
+    sort_ascending.append(primary_order == "Ascending (Low to High)")
+
+# Apply sorting if any sort columns are selected
+if sort_columns:
+    filtered_df = filtered_df.sort_values(by=sort_columns, ascending=sort_ascending)
+
+# Pagination Section
+st.markdown("---")
 
 # Add a column with clickable links
 filtered_df["Link"] = filtered_df["Vault"].apply(lambda vault: f"https://app.hyperliquid.xyz/vaults/{vault}")
@@ -349,16 +478,92 @@ filtered_df["Link"] = filtered_df["Vault"].apply(lambda vault: f"https://app.hyp
 # Reset index for continuous ranking
 filtered_df = filtered_df.reset_index(drop=True)
 
+# Pagination settings
+ITEMS_PER_PAGE = 50
+total_items = len(filtered_df)
+total_pages = max(1, (total_items - 1) // ITEMS_PER_PAGE + 1)
 
-st.dataframe(
-    filtered_df,
-    use_container_width=True,
-    # Adjust height based on the number of rows
-    height=(len(filtered_df) * 35) + 50,
-    column_config={
-        "Link": st.column_config.LinkColumn(
-            "Vault Link",
-            display_text="Vault Link",
+# Page selection
+st.title(f"📊 Vaults Results ({total_items} vaults found)")
+
+if total_items > 0:
+    # Pagination controls
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+    
+    with col2:
+        if st.button("⬅️ Previous", disabled=(st.session_state.get('current_page', 1) <= 1)):
+            if 'current_page' not in st.session_state:
+                st.session_state.current_page = 1
+            st.session_state.current_page = max(1, st.session_state.current_page - 1)
+            st.rerun()
+    
+    with col3:
+        # Initialize current page if not exists
+        if 'current_page' not in st.session_state:
+            st.session_state.current_page = 1
+            
+        # Page selector
+        current_page = st.selectbox(
+            f"Page (1-{total_pages})",
+            options=list(range(1, total_pages + 1)),
+            index=st.session_state.current_page - 1,
+            key="page_selector"
         )
-    },
-)
+        
+        # Update session state if page changed
+        if current_page != st.session_state.current_page:
+            st.session_state.current_page = current_page
+            st.rerun()
+    
+    with col4:
+        if st.button("Next ➡️", disabled=(st.session_state.current_page >= total_pages)):
+            st.session_state.current_page = min(total_pages, st.session_state.current_page + 1)
+            st.rerun()
+    
+    # Calculate pagination bounds
+    start_idx = (st.session_state.current_page - 1) * ITEMS_PER_PAGE
+    end_idx = min(start_idx + ITEMS_PER_PAGE, total_items)
+    
+    # Display page info
+    st.caption(f"Showing vaults {start_idx + 1}-{end_idx} of {total_items} (Page {st.session_state.current_page} of {total_pages})")
+    
+    # Get page data
+    page_df = filtered_df.iloc[start_idx:end_idx].copy()
+    
+    # Add ranking column
+    page_df.insert(0, "Rank", range(start_idx + 1, end_idx + 1))
+    
+    # Display the paginated table
+    st.dataframe(
+        page_df,
+        use_container_width=True,
+        height=min(600, (len(page_df) * 35) + 50),  # Cap height to prevent very tall tables
+        column_config={
+            "Rank": st.column_config.NumberColumn("Rank", width="small"),
+            "Link": st.column_config.LinkColumn(
+                "Vault Link",
+                display_text="View Vault",
+                width="medium"
+            )
+        },
+    )
+    
+    # Bottom pagination controls (duplicate for convenience)
+    st.markdown("---")
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+    
+    with col2:
+        if st.button("⬅️ Previous ", disabled=(st.session_state.current_page <= 1), key="prev_bottom"):
+            st.session_state.current_page = max(1, st.session_state.current_page - 1)
+            st.rerun()
+    
+    with col3:
+        st.markdown(f"<div style='text-align: center; padding: 10px;'><strong>Page {st.session_state.current_page} of {total_pages}</strong></div>", unsafe_allow_html=True)
+    
+    with col4:
+        if st.button("Next ➡️ ", disabled=(st.session_state.current_page >= total_pages), key="next_bottom"):
+            st.session_state.current_page = min(total_pages, st.session_state.current_page + 1)
+            st.rerun()
+
+else:
+    st.info("🔍 No vaults match your current filters. Try adjusting the filter criteria.")

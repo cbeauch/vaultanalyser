@@ -14,6 +14,7 @@ from metrics.drawdown import (
     calculate_sharpe_ratio,
     calculate_sortino_ratio,
 )
+from metrics.enhanced_metrics import calculate_all_enhanced_metrics
 
 # Page config
 st.set_page_config(page_title="HyperLiquid Vault Analyser", page_icon="📊", layout="wide")
@@ -246,7 +247,8 @@ if not cache_used:
 
                     rebuilded_pnl.append(balance)
 
-                metrics = {
+                # Calculate existing metrics
+                existing_metrics = {
                     "Max DD %": calculate_max_drawdown_on_accountValue(rebuilded_pnl),
                     "Rekt": nb_rekt,
                     "Act. Followers": nb_followers,
@@ -255,6 +257,13 @@ if not cache_used:
                     "Av. Daily Gain %": calculate_average_daily_gain(rebuilded_pnl, vault["Days Since"]),
                     "Gain %": calculate_total_gain_percentage(rebuilded_pnl),
                 }
+                
+                # Calculate enhanced metrics
+                enhanced_metrics = calculate_all_enhanced_metrics(rebuilded_pnl, vault["Days Since"])
+                
+                # Combine all metrics
+                metrics = {**existing_metrics, **enhanced_metrics}
+                
                 # Unpacks the metrics dictionary
                 indicator_row = {"Name": vault["Name"], **metrics}
                 indicators.append(indicator_row)
@@ -300,26 +309,31 @@ sliders = [
     {"label": "Min TVL accepted", "column": "Total Value Locked", "max": False, "default": 0, "step": 1},
     {"label": "Min APR accepted", "column": "APR %", "max": False, "default": 0, "step": 1},
     {"label": "Min Followers", "column": "Act. Followers", "max": False, "default": 0, "step": 1},
+    {"label": "Min Win Rate %", "column": "Win Rate %", "max": False, "default": 40, "step": 5},
+    {"label": "Min Profit Factor", "column": "Profit Factor", "max": False, "default": 1.0, "step": 0.1},
+    {"label": "Max Volatility %", "column": "Volatility %", "max": True, "default": 100, "step": 5},
+    {"label": "Min Calmar Ratio", "column": "Calmar Ratio", "max": False, "default": 0, "step": 0.1},
 ]
 
 for i in range(0, len(sliders), 3):
     cols = st.columns(3)
     for slider, col in zip(sliders[i : i + 3], cols):
         column = slider["column"]
-        value = slider_with_label(
-            slider["label"],
-            col,
-            min_value=float(filtered_df[column].min()),
-            max_value=float(filtered_df[column].max()),
-            default_value=float(slider["default"]),
-            step=float(slider["step"]),
-            key=f"slider_{column}",
-        )
-        if not value == None:
-            if slider["max"]:
-                filtered_df = filtered_df[filtered_df[column] <= value]
-            else:
-                filtered_df = filtered_df[filtered_df[column] >= value]
+        if column in filtered_df.columns:  # Check if column exists
+            value = slider_with_label(
+                slider["label"],
+                col,
+                min_value=float(filtered_df[column].min()),
+                max_value=float(filtered_df[column].max()),
+                default_value=float(slider["default"]),
+                step=float(slider["step"]),
+                key=f"slider_{column}",
+            )
+            if not value == None:
+                if slider["max"]:
+                    filtered_df = filtered_df[filtered_df[column] <= value]
+                else:
+                    filtered_df = filtered_df[filtered_df[column] >= value]
 
 # Display the table
 st.title(f"Vaults filtered ({len(filtered_df)}) ")

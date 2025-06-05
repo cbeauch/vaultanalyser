@@ -2,7 +2,3 @@
 hyperliquid/__pycache__/
 metrics/__pycache__/
 venv
-
-# Cache directory - contains processed data that can be regenerated
-cache/
-*.pkl

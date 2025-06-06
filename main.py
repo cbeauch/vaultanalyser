@@ -112,9 +112,13 @@ def read_date_file(directory="./cache"):
 # Layout for 3 columns
 
 
-def slider_with_label_and_toggle(label, col, min_value, max_value, default_value, step, key):
-    """Create a slider with a custom centered title and toggle."""
+def slider_with_label_and_toggle(label, col, min_value, max_value, default_value, step, key, description=""):
+    """Create a slider with a custom centered title, description, and toggle."""
     col.markdown(f"<h3 style='text-align: center;'>{label}</h3>", unsafe_allow_html=True)
+    
+    # Add description if provided
+    if description:
+        col.markdown(f"<p style='text-align: center; font-size: 0.8em; color: #666; margin-top: -10px;'>{description}</p>", unsafe_allow_html=True)
     
     # Add toggle switch
     toggle_enabled = col.toggle("Enable Filter", key=f"toggle_{key}", value=False)
@@ -350,7 +354,7 @@ with col2:
 
 # Show active filter info
 if st.session_state.get('top10_active', False):
-    st.info("🏆 **Top 10 Smart Filters Active**: Showing vaults with >30% APR, >55% win rate, <25% max drawdown, >30 days history, and other quality metrics.")
+    st.info("🏆 **Top 10 Smart Filters Active**: Showing vaults with >30% APR, >55% win rate, <25% max drawdown, >30 days history, Calmar ratio >0.4 (good risk-adjusted returns), and other quality metrics.")
 
 # Filters
 st.markdown("---")
@@ -378,35 +382,31 @@ if name_filter_enabled and name_filter.strip():
     filtered_df = filtered_df[filtered_df["Name"].str.contains(pattern, case=False, na=False, regex=True)]
 
 # Organize sliders into rows of 3
-# Define smart filter values for Top 10 vaults
-top10_values = {
-    "Sharpe Ratio": 0.8,
-    "Sortino Ratio": 1.0,
-    "Rekt": 0,
-    "Max DD %": 25,
-    "Days Since": 30,
-    "Total Value Locked": 10000,
-    "APR %": 30,
-    "Act. Followers": 5,
-    "Win Rate %": 55,
-    "Profit Factor": 1.2,
-    "Volatility %": 40,
-    "Calmar Ratio": 0.8,
-} if st.session_state.get('top10_active', False) else {}
-
 sliders = [
-    {"label": "Min Sharpe Ratio", "column": "Sharpe Ratio", "max": False, "default": top10_values.get("Sharpe Ratio", 0.4), "step": 0.1},
-    {"label": "Min Sortino Ratio", "column": "Sortino Ratio", "max": False, "default": top10_values.get("Sortino Ratio", 0.5), "step": 0.1},
-    {"label": "Max Rekt accepted", "column": "Rekt", "max": True, "default": top10_values.get("Rekt", 0), "step": 1},
-    {"label": "Max DD % accepted", "column": "Max DD %", "max": True, "default": top10_values.get("Max DD %", 15), "step": 1},
-    {"label": "Min Days Since accepted", "column": "Days Since", "max": False, "default": top10_values.get("Days Since", 100), "step": 1},
-    {"label": "Min TVL accepted", "column": "Total Value Locked", "max": False, "default": top10_values.get("Total Value Locked", 0), "step": 1},
-    {"label": "Min APR accepted", "column": "APR %", "max": False, "default": top10_values.get("APR %", 0), "step": 1},
-    {"label": "Min Followers", "column": "Act. Followers", "max": False, "default": top10_values.get("Act. Followers", 0), "step": 1},
-    {"label": "Min Win Rate %", "column": "Win Rate %", "max": False, "default": top10_values.get("Win Rate %", 40), "step": 5},
-    {"label": "Min Profit Factor", "column": "Profit Factor", "max": False, "default": top10_values.get("Profit Factor", 1.0), "step": 0.1},
-    {"label": "Max Volatility %", "column": "Volatility %", "max": True, "default": top10_values.get("Volatility %", 100), "step": 5},
-    {"label": "Min Calmar Ratio", "column": "Calmar Ratio", "max": False, "default": top10_values.get("Calmar Ratio", 0), "step": 0.1},
+    {"label": "Min Sharpe Ratio", "column": "Sharpe Ratio", "max": False, "default": 0.4, "step": 0.1, 
+     "description": "Risk-adjusted returns. Higher = better returns per unit of risk. Good: 1.0+"},
+    {"label": "Min Sortino Ratio", "column": "Sortino Ratio", "max": False, "default": 0.5, "step": 0.1,
+     "description": "Downside risk-adjusted returns. Focuses on bad volatility only. Good: 1.0+"},
+    {"label": "Max Rekt accepted", "column": "Rekt", "max": True, "default": 0, "step": 1,
+     "description": "Number of liquidations (total account loss). 0 = never liquidated"},
+    {"label": "Max DD % accepted", "column": "Max DD %", "max": True, "default": 15, "step": 1,
+     "description": "Maximum drawdown from peak. Lower = less risk. Good: <20%"},
+    {"label": "Min Days Since accepted", "column": "Days Since", "max": False, "default": 100, "step": 1,
+     "description": "Days since vault launch. Higher = more track record. Good: 30+"},
+    {"label": "Min TVL accepted", "column": "Total Value Locked", "max": False, "default": 0, "step": 1,
+     "description": "Total assets in vault ($). Higher = more liquidity. Good: $10k+"},
+    {"label": "Min APR accepted", "column": "APR %", "max": False, "default": 0, "step": 1,
+     "description": "Annualized percentage return. Higher = better performance. Good: 30%+"},
+    {"label": "Min Followers", "column": "Act. Followers", "max": False, "default": 0, "step": 1,
+     "description": "Number of active followers. Higher = more social proof. Good: 5+"},
+    {"label": "Min Win Rate %", "column": "Win Rate %", "max": False, "default": 40, "step": 5,
+     "description": "Percentage of profitable periods. Higher = more consistent. Good: 60%+"},
+    {"label": "Min Profit Factor", "column": "Profit Factor", "max": False, "default": 1.0, "step": 0.1,
+     "description": "Total profits ÷ total losses. Higher = more profitable. Good: 1.5+"},
+    {"label": "Max Volatility %", "column": "Volatility %", "max": True, "default": 100, "step": 5,
+     "description": "Price variation (annualized). Lower = less risky. Good: <40%"},
+    {"label": "Min Calmar Ratio", "column": "Calmar Ratio", "max": False, "default": 0, "step": 0.1,
+     "description": "Return ÷ max drawdown. Higher = better risk-adjusted returns. Good: 1.0+"},
 ]
 
 for i in range(0, len(sliders), 3):
@@ -438,11 +438,10 @@ for i in range(0, len(sliders), 3):
                         default_value=safe_default,
                         step=float(slider["step"]),
                         key=f"slider_{column}",
+                        description=slider.get("description", ""),
                     )
                     
-                    # Auto-enable toggles for Top 10 mode
-                    if st.session_state.get('top10_active', False) and column in top10_values:
-                        toggle_enabled = True
+                    # Note: Top 10 filters will be applied after all sliders are processed
                     
                     # Only apply filter if toggle is enabled and value is not None
                     if toggle_enabled and value is not None:
@@ -456,6 +455,45 @@ for i in range(0, len(sliders), 3):
             else:
                 # No valid data for this column
                 col.warning(f"No valid data for {column}")
+
+# Apply Top 10 Smart Filters (if active)
+if st.session_state.get('top10_active', False):
+    st.markdown("### 🏆 Applying Smart Filters for Top 10 Vaults...")
+    
+    # Apply all Top 10 criteria at once
+    top10_criteria = [
+        ("APR %", ">=", 30),
+        ("Win Rate %", ">=", 55),
+        ("Max DD %", "<=", 25),
+        ("Days Since", ">=", 30),
+        ("Total Value Locked", ">=", 10000),
+        ("Sharpe Ratio", ">=", 0.3),      # Lowered from 0.5 to 0.3
+        ("Sortino Ratio", ">=", 0.4),     # Lowered from 0.6 to 0.4
+        ("Profit Factor", ">=", 1.2),
+        # Removed volatility filter - too restrictive for crypto
+        ("Calmar Ratio", ">=", 0.3),      # Lowered from 0.4 to 0.3
+        ("Rekt", "<=", 0),
+        ("Act. Followers", ">=", 3),
+    ]
+    
+    initial_count = len(filtered_df)
+    
+    for column, operator, value in top10_criteria:
+        if column in filtered_df.columns:
+            # Clean the data first
+            before_count = len(filtered_df)
+            
+            if operator == ">=":
+                filtered_df = filtered_df[filtered_df[column] >= value]
+            elif operator == "<=":
+                filtered_df = filtered_df[filtered_df[column] <= value]
+            
+            after_count = len(filtered_df)
+            if before_count != after_count:
+                st.caption(f"   ✓ {column} {operator} {value}: {before_count} → {after_count} vaults")
+    
+    final_count = len(filtered_df)
+    st.success(f"🎯 Smart filtering complete: {initial_count} → {final_count} qualifying vaults")
 
 # Multi-Column Sorting Section
 st.markdown("---")

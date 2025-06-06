@@ -160,9 +160,20 @@ def calculate_volatility_with_timestamps(pnl_history: List[List], account_value_
         # Calculate average time interval and use it for proper annualization
         avg_interval_days = np.mean(time_intervals)
         if avg_interval_days > 0:
-            # Annualize based on actual time intervals
-            periods_per_year = 365 / avg_interval_days
-            volatility *= np.sqrt(periods_per_year)
+            # Cap the annualization to prevent extreme values from high-frequency data
+            # If data is more frequent than daily, use daily volatility scaling
+            if avg_interval_days < 1.0:
+                # For intraday data, scale to daily first, then annualize
+                daily_volatility = volatility * np.sqrt(1.0 / avg_interval_days)
+                # Then annualize daily volatility (√252 for trading days)
+                volatility = daily_volatility * np.sqrt(252)
+            else:
+                # For data with intervals >= 1 day, use normal annualization
+                periods_per_year = 365 / avg_interval_days
+                volatility *= np.sqrt(periods_per_year)
+            
+            # Cap maximum volatility at 500% to prevent unrealistic values
+            volatility = min(volatility, 5.0)
     
     return round(float(volatility * 100), 2)
 
@@ -184,12 +195,24 @@ def calculate_calmar_ratio_with_timestamps(pnl_values: List[float], total_days: 
     
     # Calculate max drawdown
     from .drawdown import calculate_max_drawdown_on_accountValue
-    max_dd = calculate_max_drawdown_on_accountValue(pnl_values) / 100
+    max_dd_pct = calculate_max_drawdown_on_accountValue(pnl_values)
+    max_dd = max_dd_pct / 100
     
-    if max_dd == 0:
-        return float('inf') if annualized_return > 0 else 0.0
+    # Handle edge cases and prevent extreme values
+    if max_dd <= 0.001:  # If drawdown is less than 0.1%
+        # Cap the Calmar ratio at 100 for very low drawdowns
+        return 100.0 if annualized_return > 0 else 0.0
     
-    return round(annualized_return / max_dd, 2)
+    calmar_ratio = annualized_return / max_dd
+    
+    # Cap maximum Calmar ratio at 100 to prevent extreme values
+    calmar_ratio = min(abs(calmar_ratio), 100.0)
+    
+    # Return negative if annualized return is negative
+    if annualized_return < 0:
+        calmar_ratio = -calmar_ratio
+    
+    return round(float(calmar_ratio), 2)
 
 
 def calculate_recovery_factor(pnl_values: List[float]) -> float:

@@ -327,7 +327,33 @@ if not cache_used:
     final_df.to_pickle(DATAFRAME_CACHE_FILE)
 
 
+# Quick Action: Find Top 10 Vaults
+st.markdown("---")
+st.markdown("<h3 style='text-align: center;'>🚀 Quick Action</h3>", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("🏆 Find Top 10 Vaults", type="primary", use_container_width=True):
+        # Set session state for filters to enable smart filtering
+        st.session_state['top10_active'] = True
+        st.session_state['quick_filter_applied'] = True
+        st.toast("🎯 Applied smart filters for top vaults!", icon="🏆")
+        st.rerun()
+
+    if st.button("🔄 Reset All Filters", use_container_width=True):
+        # Clear all session state filters
+        keys_to_clear = [k for k in st.session_state.keys() if k.startswith(('toggle_', 'slider_', 'primary_sort', 'secondary_sort', 'tertiary_sort', 'top10_active', 'quick_filter_applied'))]
+        for key in keys_to_clear:
+            del st.session_state[key]
+        st.toast("🔄 All filters reset!", icon="✅")
+        st.rerun()
+
+# Show active filter info
+if st.session_state.get('top10_active', False):
+    st.info("🏆 **Top 10 Smart Filters Active**: Showing vaults with >30% APR, >55% win rate, <25% max drawdown, >30 days history, and other quality metrics.")
+
 # Filters
+st.markdown("---")
 st.subheader(f"Vaults available ({len(final_df)})")
 filtered_df = final_df
 
@@ -352,19 +378,35 @@ if name_filter_enabled and name_filter.strip():
     filtered_df = filtered_df[filtered_df["Name"].str.contains(pattern, case=False, na=False, regex=True)]
 
 # Organize sliders into rows of 3
+# Define smart filter values for Top 10 vaults
+top10_values = {
+    "Sharpe Ratio": 0.8,
+    "Sortino Ratio": 1.0,
+    "Rekt": 0,
+    "Max DD %": 25,
+    "Days Since": 30,
+    "Total Value Locked": 10000,
+    "APR %": 30,
+    "Act. Followers": 5,
+    "Win Rate %": 55,
+    "Profit Factor": 1.2,
+    "Volatility %": 40,
+    "Calmar Ratio": 0.8,
+} if st.session_state.get('top10_active', False) else {}
+
 sliders = [
-    {"label": "Min Sharpe Ratio", "column": "Sharpe Ratio", "max": False, "default": 0.4, "step": 0.1},
-    {"label": "Min Sortino Ratio", "column": "Sortino Ratio", "max": False, "default": 0.5, "step": 0.1},
-    {"label": "Max Rekt accepted", "column": "Rekt", "max": True, "default": 0, "step": 1},
-    {"label": "Max DD % accepted", "column": "Max DD %", "max": True, "default": 15, "step": 1},
-    {"label": "Min Days Since accepted", "column": "Days Since", "max": False, "default": 100, "step": 1},
-    {"label": "Min TVL accepted", "column": "Total Value Locked", "max": False, "default": 0, "step": 1},
-    {"label": "Min APR accepted", "column": "APR %", "max": False, "default": 0, "step": 1},
-    {"label": "Min Followers", "column": "Act. Followers", "max": False, "default": 0, "step": 1},
-    {"label": "Min Win Rate %", "column": "Win Rate %", "max": False, "default": 40, "step": 5},
-    {"label": "Min Profit Factor", "column": "Profit Factor", "max": False, "default": 1.0, "step": 0.1},
-    {"label": "Max Volatility %", "column": "Volatility %", "max": True, "default": 100, "step": 5},
-    {"label": "Min Calmar Ratio", "column": "Calmar Ratio", "max": False, "default": 0, "step": 0.1},
+    {"label": "Min Sharpe Ratio", "column": "Sharpe Ratio", "max": False, "default": top10_values.get("Sharpe Ratio", 0.4), "step": 0.1},
+    {"label": "Min Sortino Ratio", "column": "Sortino Ratio", "max": False, "default": top10_values.get("Sortino Ratio", 0.5), "step": 0.1},
+    {"label": "Max Rekt accepted", "column": "Rekt", "max": True, "default": top10_values.get("Rekt", 0), "step": 1},
+    {"label": "Max DD % accepted", "column": "Max DD %", "max": True, "default": top10_values.get("Max DD %", 15), "step": 1},
+    {"label": "Min Days Since accepted", "column": "Days Since", "max": False, "default": top10_values.get("Days Since", 100), "step": 1},
+    {"label": "Min TVL accepted", "column": "Total Value Locked", "max": False, "default": top10_values.get("Total Value Locked", 0), "step": 1},
+    {"label": "Min APR accepted", "column": "APR %", "max": False, "default": top10_values.get("APR %", 0), "step": 1},
+    {"label": "Min Followers", "column": "Act. Followers", "max": False, "default": top10_values.get("Act. Followers", 0), "step": 1},
+    {"label": "Min Win Rate %", "column": "Win Rate %", "max": False, "default": top10_values.get("Win Rate %", 40), "step": 5},
+    {"label": "Min Profit Factor", "column": "Profit Factor", "max": False, "default": top10_values.get("Profit Factor", 1.0), "step": 0.1},
+    {"label": "Max Volatility %", "column": "Volatility %", "max": True, "default": top10_values.get("Volatility %", 100), "step": 5},
+    {"label": "Min Calmar Ratio", "column": "Calmar Ratio", "max": False, "default": top10_values.get("Calmar Ratio", 0), "step": 0.1},
 ]
 
 for i in range(0, len(sliders), 3):
@@ -397,6 +439,11 @@ for i in range(0, len(sliders), 3):
                         step=float(slider["step"]),
                         key=f"slider_{column}",
                     )
+                    
+                    # Auto-enable toggles for Top 10 mode
+                    if st.session_state.get('top10_active', False) and column in top10_values:
+                        toggle_enabled = True
+                    
                     # Only apply filter if toggle is enabled and value is not None
                     if toggle_enabled and value is not None:
                         if slider["max"]:
@@ -428,7 +475,12 @@ sort_col1, sort_col2, sort_col3 = st.columns(3)
 
 # Set default primary sort to APR if it exists and no sort has been selected yet
 default_primary_index = 0
-if "APR" in sort_options and "primary_sort" not in st.session_state:
+if st.session_state.get('top10_active', False) and "Calmar Ratio" in sort_options:
+    # For Top 10 mode, prioritize Calmar Ratio (risk-adjusted returns)
+    default_primary_index = sort_options.index("Calmar Ratio")
+elif "APR %" in sort_options and "primary_sort" not in st.session_state:
+    default_primary_index = sort_options.index("APR %")
+elif "APR" in sort_options and "primary_sort" not in st.session_state:
     default_primary_index = sort_options.index("APR")
 
 with sort_col1:
@@ -469,6 +521,10 @@ if primary_sort != "None":
 if sort_columns:
     filtered_df = filtered_df.sort_values(by=sort_columns, ascending=sort_ascending)
 
+# Limit to top 10 if Top 10 mode is active
+if st.session_state.get('top10_active', False):
+    filtered_df = filtered_df.head(10)
+
 # Pagination Section
 st.markdown("---")
 
@@ -484,7 +540,10 @@ total_items = len(filtered_df)
 total_pages = max(1, (total_items - 1) // ITEMS_PER_PAGE + 1)
 
 # Page selection
-st.title(f"📊 Vaults Results ({total_items} vaults found)")
+if st.session_state.get('top10_active', False):
+    st.title(f"🏆 Top 10 Vaults ({total_items} vaults found)")
+else:
+    st.title(f"📊 Vaults Results ({total_items} vaults found)")
 
 if total_items > 0:
     # Pagination controls
